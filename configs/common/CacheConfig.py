@@ -43,6 +43,7 @@
 
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 
 import m5
 from m5.objects import *
@@ -57,6 +58,10 @@ def config_cache(options, system):
     if options.external_memory_system:
         ExternalCache = ExternalCacheFactory(options.external_memory_system)
 
+    use_config_cache_options = False
+    use_config_l2_options = False
+    use_config_walker = False
+
     if options.cpu_type == "O3_ARM_v7a_3":
         try:
             import cores.arm.O3_ARM_v7a as core
@@ -68,6 +73,55 @@ def config_cache(options, system):
             core.O3_ARM_v7a_DCache, core.O3_ARM_v7a_ICache, \
             core.O3_ARM_v7aL2, \
             core.O3_ARM_v7aWalkCache
+
+        use_config_cache_options = True
+        use_config_l2_options = True
+        use_config_walker = True
+
+    elif options.cpu_type == "ex5_big":
+        try:
+            import cores.arm.ex5_big as core
+        except:
+            print("ex5_big available. Did you compile the O3 model?")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = \
+            core.L1D, core.L1I, \
+            core.L2, \
+            core.WalkCache
+
+        use_config_cache_options = True
+        use_config_l2_options = True
+        use_config_walker = True
+
+    elif options.cpu_type == "O3_arm_a57":
+        try:
+            import cores.arm.O3_arm_a57 as core
+        except:
+            print("O3_arm_a57 is unavailable")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = \
+            core.L1D, core.L1I, core.L2, core.WalkCache
+
+        use_config_cache_options = True
+        use_config_l2_options = True
+        use_config_walker = True
+
+    elif options.cpu_type == "O3_TX1":
+        try:
+            import cores.arm.O3_TX1 as core
+        except:
+            print("O3_TX1 is unavailable")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = \
+            core.L1D, core.L1I, core.L2, core.WalkCache
+
+        use_config_cache_options = True
+        use_config_l2_options = True
+        use_config_walker = True
+
     elif options.cpu_type == "HPI":
         try:
             import cores.arm.HPI as core
@@ -91,18 +145,65 @@ def config_cache(options, system):
     # minimal so that compute delays do not include memory access latencies.
     # Configure the compulsory L1 caches for the O3CPU, do not configure
     # any more caches.
-    if options.l2cache and options.elastic_trace_en:
+    if (options.l2cache or use_config_l2_options) and options.elastic_trace_en:
         fatal("When elastic trace is enabled, do not configure L2 caches.")
 
-    if options.l2cache:
+    if options.l2cache or use_config_l2_options:
         # Provide a clock for the L2 and the L1-to-L2 bus here as they
         # are not connected using addTwoLevelCacheHierarchy. Use the
         # same clock as the CPUs.
-        system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
-                                   size=options.l2_size,
-                                   assoc=options.l2_assoc)
+        # system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+        #                            size=options.l2_size,
+        #                            assoc=options.l2_assoc)
+
+        # check if we're using values from an existing configuration
+        if use_config_l2_options:
+            # adjustment to TX1 core mshrs to handle different speeds
+            #if options.cpu_type == "O3_TX1"
+            print("cpu clock ",options.cpu_clock)
+            import cores.arm.O3_TX1 as core
+            if options.cpu_type == "O3_TX1" and options.cpu_clock in core.l2_mshrs:
+                mshrs = core.l2_mshrs[options.cpu_clock]
+
+                # check and see if we're using a decoupled configuration
+                if options.l2_speed is not 0:
+                    # sub 1 for random access slowdown across domains
+                    mshrs = core.l2_mshrs[str(options.l2_speed) + "MHz"]
+                    core_speed = int(options.cpu_clock.split("MHz")[0])
+                    latency_factor = core_speed / options.l2_speed
+                    # add 2 cycles equivalent for synch delays
+                    # (34 cycles is need to get the same behaviour
+                    # as 15 on the actual hardware)
+                    latency = int(round(latency_factor * 34))
+                    system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+                                               mshrs=mshrs,
+                                               tag_latency=latency,
+                                               data_latency=latency,
+                                               response_latency=latency)
+                else:
+                    # mshrs stay the same (for now)
+                    system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+                                               mshrs=mshrs)
+                print("Using ", system.l2.mshrs," mshrs")
+                print("Using ", system.l2.data_latency, " cycles latency")
+            else:
+                system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain)
+
+        # check if we're using custom latencies
+        elif options.custom_latency:
+            system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+                                       size=options.l2_size,
+                                       assoc=options.l2_assoc,
+                                       tag_latency=options.l2_latency,
+                                       data_latency=options.l2_latency,
+                                       response_latency=options.l2_latency)
+        else:
+            system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+                                       size=options.l2_size,
+                                       assoc=options.l2_assoc)
 
         system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
+
         system.l2.cpu_side = system.tol2bus.master
         system.l2.mem_side = system.membus.slave
         if options.l2_hwp_type:
@@ -118,11 +219,33 @@ def config_cache(options, system):
         system.memchecker = MemChecker()
 
     for i in range(options.num_cpus):
-        if options.caches:
-            icache = icache_class(size=options.l1i_size,
-                                  assoc=options.l1i_assoc)
-            dcache = dcache_class(size=options.l1d_size,
-                                  assoc=options.l1d_assoc)
+        # if options.caches:
+        #     icache = icache_class(size=options.l1i_size,
+        #                           assoc=options.l1i_assoc)
+        #     dcache = dcache_class(size=options.l1d_size,
+        #                           assoc=options.l1d_assoc)
+        if options.caches or use_config_cache_options:
+            #check if we're using config values
+            if use_config_cache_options:
+                icache = icache_class()
+                dcache = dcache_class()
+            # check if we're using custom latencies
+            elif options.custom_latency:
+                icache = icache_class(size=options.l1i_size,
+                                      assoc=options.l1i_assoc,
+                                      tag_latency=options.l1i_latency,
+                                      data_latency=options.l1i_latency,
+                                      response_latency=options.l1i_latency)
+                dcache = dcache_class(size=options.l1d_size,
+                                      assoc=options.l1d_assoc,
+                                      tag_latency=options.l1d_latency,
+                                      data_latency=options.l1d_latency,
+                                      response_latency=options.l1d_latency)
+            else:
+                icache = icache_class(size=options.l1i_size,
+                                      assoc=options.l1i_assoc)
+                dcache = dcache_class(size=options.l1d_size,
+                                      assoc=options.l1d_assoc)
 
             # If we have a walker cache specified, instantiate two
             # instances here
@@ -195,7 +318,7 @@ def config_cache(options, system):
                         ExternalCache("cpu%d.dcache" % i))
 
         system.cpu[i].createInterruptController()
-        if options.l2cache:
+        if options.l2cache or use_config_l2_options:
             system.cpu[i].connectAllPorts(system.tol2bus, system.membus)
         elif options.external_memory_system:
             system.cpu[i].connectUncachedPorts(system.membus)

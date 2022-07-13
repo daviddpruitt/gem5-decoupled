@@ -983,6 +983,129 @@ class LPDDR3_1600_1x32(DRAMCtrl):
     VDD = '1.8V'
     VDD2 = '1.2V'
 
+# A single LPDDR4 x32 interface (one command/address bus), with
+# default timings based on a LPDDR3-1600 4 Gbit part (Micron
+# EDF8132A1MC) in a 1x32 configuration.
+# Using Micron MT53B256M32D1
+class LPDDR4_1600_1x32(DRAMCtrl):
+    # size of device
+    device_size = '256MB'
+
+    # 2x16x2 configuration,
+    # 2 channels with 16-bit widths
+    device_bus_width = 32
+
+    # LPDDR4 is a BL16 or BL32 device
+    burst_length = 8
+
+    # Each device has a page (row buffer) size of 2kB
+    device_rowbuffer_size = '2kB'
+
+    # 1x32 configuration, so 1 device
+    devices_per_rank = 1
+
+    # 1 rank per channel for 256MB
+    ranks_per_channel = 1
+
+    # 8 banks per channel, 2 channels, 1 rank
+    banks_per_rank = 16
+
+    channels = 2
+
+    # No DLL for LPDDR4
+    dll = False
+
+    # 1600 MHz
+    tCK = '0.625ns'
+
+    # RAS CAS delay
+    # max(18ns, 4nCK)
+    tRCD = '18ns'
+
+    # Time from issuing a read/write command to seeing the data
+    # Listed as RL or read latency 28 CK @ 1600 MHz, 0.625 cycle time
+    # 12 CK read latency, 6 CK write latency @ 800 MHz, 1.25 ns cycle time
+    tCL = '17.5ns'
+
+    # Pre-charge one bank, all banks is 21ns
+    # max(18ns, 3nCK)
+    tRP = '18ns'
+
+    # minimum time between an activate and a precharge to the same row
+    # max(42ns, 3nCK)
+    tRAS = '42ns'
+
+    # Minimum time between a write data transfer and a precharge
+    # max(18ns, 4nCK)
+    tWR = '18ns'
+
+    # Minimum time between a read and precharge command
+    # max(7.5ns, 8nCK)
+    tRTP = '7.5ns'
+
+    # 32 beats across a x32 DDR interface translates to 16 clocks @ 1600 MHz.
+    # Note this is a BL16 or BL32 DDR device.
+    tBURST = '2.5ns'
+    #'10ns'
+
+    # LPDDR4, 2Gb/channel
+    tRFC = '130ns'
+
+    # Refresh command interval, 3.903us for all densities < 12Gb per channel
+    tREFI = '3.9us'
+
+    # Irrespective of speed grade, tWTR is 10 ns or 4 CK
+    # max(10ns, 4nCK)
+    tWTR = '10ns'
+
+    # Default same rank rd-to-wr bus turnaround to 4 CK, @1600 MHz = 2.5 ns
+    tRTW = '2.5ns'
+
+    # Default different rank bus delay to 2 CK, @1600 MHz = 1.25 ns
+    tCS = '1.25ns'
+
+    # Activate to activate irrespective of density and speed grade
+    # max(10ns, 4nCK)
+    tRRD = '10.0ns'
+
+    # Irrespective of size, tFAW is 50 ns
+    tXAW = '40ns'
+    activation_limit = 4
+
+    # active powerdown and precharge powerdown exit time
+    # max(7.5ns, 2nCK)
+    tXP = '7.5ns'
+
+    # self refresh exit time, depends on speed grade
+    # max(tRFC + 7.5ns, 2nCK)
+    tXS = '137.5ns'
+
+    # Current values from datasheet
+    IDD0 = '8mA'
+    IDD02 = '60mA'
+    IDD2P0 = '2mA'
+    IDD2P02 = '3.5mA'
+    IDD2P1 = '2mA'
+    IDD2P12 = '3.5mA'
+    IDD2N = '2mA'
+    IDD2N2 = '45mA'
+    IDD3P0 = '2mA'
+    IDD3P02 = '10mA'
+    IDD3P1 = '2mA'
+    IDD3P12 = '10mA'
+    IDD3N = '4mA'
+    IDD3N2 = '57mA'
+    IDD4R = '5mA'
+    IDD4R2 = '450mA'
+    IDD4W = '5mA'
+    IDD4W2 = '350mA'
+    IDD5 = '20mA'
+    IDD52 = '170mA'
+    IDD6 = '0.4mA'
+    IDD62 = '0.7mA'
+    VDD = '1.8V'
+    VDD2 = '1.1V'
+
 # A single GDDR5 x64 interface, with
 # default timings based on a GDDR5-4000 1 Gbit part (SK Hynix
 # H5GQ1H24AFR) in a 2x32 configuration.
